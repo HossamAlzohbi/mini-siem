@@ -1,0 +1,92 @@
+title: SSH failed login
+name: ssh_failed_login
+description: Building block. A failed SSH password/key/keyboard-interactive login.
+logsource: {product: linux, service: sshd}
+detection:
+  selection:
+    action: failed_password
+  condition: selection
+level: informational
+---
+title: SSH accepted login
+name: ssh_accepted_login
+description: Building block. A successful SSH login.
+logsource: {product: linux, service: sshd}
+detection:
+  selection:
+    action: accepted
+  condition: selection
+level: informational
+---
+title: SSH brute force
+name: ssh_bruteforce
+description: Many failed SSH logins from one source address in a short time.
+alert: true
+tags: [attack.credential_access, attack.t1110.001]
+falsepositives:
+  - Misconfigured automation or a user with a stale saved password retrying in a loop.
+correlation:
+  type: event_count
+  rules: [ssh_failed_login]
+  group-by: [src_ip]
+  timespan: 5m
+  condition: {gte: 8}
+level: high
+---
+title: SSH slow brute force
+name: ssh_slow_bruteforce
+description: >
+  Low-and-slow guessing that stays under the fast brute-force threshold but adds up over an hour.
+tags: [attack.credential_access, attack.t1110.001]
+falsepositives:
+  - Shared NAT address in front of many users who occasionally mistype their password.
+correlation:
+  type: event_count
+  rules: [ssh_failed_login]
+  group-by: [src_ip]
+  timespan: 1h
+  condition: {gte: 20}
+level: medium
+---
+title: SSH password spraying
+name: ssh_password_spray
+description: One source address fails to log in as many different accounts (spraying or user enumeration).
+tags: [attack.credential_access, attack.t1110.003]
+falsepositives:
+  - Vulnerability scanners run by your own team.
+correlation:
+  type: value_count
+  rules: [ssh_failed_login]
+  group-by: [src_ip]
+  timespan: 10m
+  condition: {gte: 5, field: user}
+level: high
+---
+title: SSH login succeeded after brute force
+name: ssh_compromise
+description: >
+  A successful SSH login from an address that just triggered the brute-force detection.
+  Treat the account as compromised until proven otherwise.
+tags: [attack.credential_access, attack.t1110, attack.initial_access, attack.t1078]
+falsepositives:
+  - A legitimate user behind the same NAT address as an attacker.
+correlation:
+  type: temporal_ordered
+  rules: [ssh_bruteforce, ssh_accepted_login]
+  group-by: [src_ip]
+  timespan: 15m
+level: critical
+---
+title: SSH root login
+name: ssh_root_login
+description: Direct SSH login as root. Most hardening guides recommend disabling this.
+logsource: {product: linux, service: sshd}
+detection:
+  selection:
+    action: accepted
+    user: root
+  condition: selection
+tags: [attack.initial_access, attack.t1078]
+falsepositives:
+  - Legacy administration workflows.
+level: medium

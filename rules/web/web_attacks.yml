@@ -1,0 +1,201 @@
+title: SQL injection in URL
+name: web_sqli
+description: Common SQL injection payloads in the query string.
+logsource: {category: webserver}
+detection:
+  selection:
+    cs-uri-query|contains:
+      - 'union select'
+      - 'union all select'
+      - "' or '1'='1"
+      - "' or 1=1"
+      - ' or 1=1'
+      - 'sleep('
+      - 'benchmark('
+      - 'pg_sleep('
+      - 'waitfor delay'
+      - 'information_schema'
+      - 'extractvalue('
+      - "'; drop table"
+  condition: selection
+tags: [attack.initial_access, attack.t1190]
+falsepositives:
+  - Security testing of your own site, or a documentation site that discusses SQL.
+level: high
+---
+title: Cross-site scripting attempt in URL
+name: web_xss
+description: Script injection markers in the query string.
+logsource: {category: webserver}
+detection:
+  selection:
+    cs-uri-query|contains:
+      - '<script'
+      - 'javascript:'
+      - 'onerror='
+      - 'onload='
+      - '<img src=x'
+  condition: selection
+tags: [attack.initial_access, attack.t1190]
+falsepositives:
+  - Pen tests; rich-text editors that post HTML via GET (rare).
+level: medium
+---
+title: Path traversal attempt
+name: web_path_traversal
+description: Directory traversal sequences or well-known sensitive files requested via URL.
+logsource: {category: webserver}
+detection:
+  selection_query:
+    cs-uri-query|contains:
+      - '../'
+      - '..\'
+      - '/etc/passwd'
+      - '/etc/shadow'
+      - 'c:\windows'
+      - 'boot.ini'
+  selection_stem:
+    cs-uri-stem|contains:
+      - '../'
+      - '/etc/passwd'
+  condition: 1 of selection_*
+tags: [attack.initial_access, attack.t1190]
+falsepositives:
+  - Applications that legitimately pass relative paths in parameters.
+level: high
+---
+title: Log4Shell JNDI lookup in request
+name: web_log4shell
+description: 'JNDI lookup strings in the URL, referer or user agent (CVE-2021-44228 exploitation attempts).'
+logsource: {category: webserver}
+detection:
+  selection:
+    cs-uri-query|contains: '${jndi:'
+  selection_ua:
+    cs-user-agent|contains: '${jndi:'
+  selection_ref:
+    cs-referer|contains: '${jndi:'
+  selection_stem:
+    cs-uri-stem|contains: '${jndi:'
+  condition: 1 of selection*
+tags: [attack.initial_access, attack.t1190, cve.2021.44228]
+falsepositives:
+  - Scanners run by your own team.
+level: high
+---
+title: Known scanner user agent
+name: web_scanner_useragent
+description: User agents of well-known vulnerability scanners and enumeration tools.
+logsource: {category: webserver}
+detection:
+  selection:
+    cs-user-agent|contains:
+      - 'sqlmap'
+      - 'nikto'
+      - 'nmap'
+      - 'masscan'
+      - 'wpscan'
+      - 'gobuster'
+      - 'dirbuster'
+      - 'feroxbuster'
+      - 'nuclei'
+      - 'zgrab'
+      - 'acunetix'
+      - 'nessus'
+      - 'fuzz faster'
+  condition: selection
+tags: [attack.reconnaissance, attack.t1595.002]
+falsepositives:
+  - Authorised scans and uptime/security monitoring that you operate.
+level: medium
+---
+title: Request for sensitive or admin path
+name: web_sensitive_probe
+description: Building block. Requests for files and panels attackers commonly look for.
+logsource: {category: webserver}
+detection:
+  selection:
+    cs-uri-stem|contains:
+      - '/.env'
+      - '/.git/'
+      - '/.aws/'
+      - '/phpmyadmin'
+      - '/wp-admin'
+      - '/xmlrpc.php'
+      - '/cgi-bin/'
+      - '/actuator'
+      - '/server-status'
+      - '/config.json'
+      - '/backup.sql'
+      - '/shell.php'
+  condition: selection
+level: informational
+---
+title: Probing for sensitive paths
+name: web_scanner_probing
+description: One address requests several sensitive or admin paths in a short time.
+tags: [attack.reconnaissance, attack.t1595.002]
+falsepositives:
+  - Administrators who really do use these paths from the same address.
+correlation:
+  type: event_count
+  rules: [web_sensitive_probe]
+  group-by: [c-ip]
+  timespan: 5m
+  condition: {gte: 3}
+level: medium
+---
+title: HTTP 404 response
+name: web_404
+description: Building block. A request that returned 404.
+logsource: {category: webserver}
+detection:
+  selection:
+    sc-status: 404
+  condition: selection
+level: informational
+---
+title: Directory enumeration (404 flood)
+name: web_404_flood
+description: Many 404 responses to the same client in one minute, typical for wordlist-based content discovery.
+tags: [attack.reconnaissance, attack.t1595.003]
+falsepositives:
+  - Broken deployments (missing assets) hit by a single busy client; aggressive but legitimate crawlers.
+correlation:
+  type: event_count
+  rules: [web_404]
+  group-by: [c-ip]
+  timespan: 1m
+  condition: {gte: 25}
+level: medium
+---
+title: Failed web login
+name: web_login_failure
+description: Building block. A POST to a login endpoint answered with 401/403.
+logsource: {category: webserver}
+detection:
+  selection:
+    cs-method: POST
+    cs-uri-stem|endswith:
+      - '/login'
+      - '/signin'
+      - '/wp-login.php'
+    sc-status:
+      - 401
+      - 403
+  condition: selection
+level: informational
+---
+title: Web login brute force / credential stuffing
+name: web_login_bruteforce
+description: Many failed login requests from one client in two minutes.
+tags: [attack.credential_access, attack.t1110]
+falsepositives:
+  - Several users behind one NAT address after a password reset campaign.
+correlation:
+  type: event_count
+  rules: [web_login_failure]
+  group-by: [c-ip]
+  timespan: 2m
+  condition: {gte: 10}
+level: high

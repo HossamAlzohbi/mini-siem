@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MiniSIEM</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23b4281e'/%3E%3Cpath d='M16 6l9 4v6c0 5-4 8-9 10-5-2-9-5-9-10v-6z' fill='none' stroke='white' stroke-width='2'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap bar">
+    <h1>MiniSIEM</h1>
+    <span class="muted" id="range"></span>
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-tab="alerts" aria-selected="true">Alerts</button>
+      <button role="tab" data-tab="events" aria-selected="false">Events</button>
+      <button role="tab" data-tab="rules" aria-selected="false">Rules</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="tiles" id="tiles" aria-label="Summary"></section>
+
+  <div id="tab-alerts">
+    <section class="grid2">
+      <div class="card">
+        <h2>Alerts over time</h2>
+        <div id="timeline" class="chart" role="img" aria-label="Stacked bar chart of alerts over time by severity"></div>
+        <div class="legend" id="legend"></div>
+      </div>
+      <div class="card">
+        <h2>Most alerted sources</h2>
+        <ol class="entities" id="entities"></ol>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="filters">
+        <label>Minimum level
+          <select id="level">
+            <option value="informational">all</option><option value="low">low</option>
+            <option value="medium">medium</option><option value="high">high</option>
+            <option value="critical">critical</option>
+          </select>
+        </label>
+        <label class="grow">Search
+          <input id="alert-q" type="search" placeholder="rule, title or IP address">
+        </label>
+      </div>
+      <div class="scroll">
+        <table id="alerts-table">
+          <thead><tr><th>Level</th><th>First seen (UTC)</th><th>Rule</th><th class="num">Events</th><th>Source</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p class="muted small" id="alerts-note"></p>
+    </section>
+
+    <section class="card" id="detail" hidden>
+      <div class="detail-head">
+        <h2 id="d-title"></h2>
+        <button id="d-close" class="ghost" aria-label="Close details">Close</button>
+      </div>
+      <p id="d-desc"></p>
+      <dl class="facts" id="d-facts"></dl>
+      <div class="chips" id="d-tags"></div>
+      <h3>Evidence</h3>
+      <div class="scroll"><table id="d-events"><thead><tr><th>Time (UTC)</th><th>Host</th><th>Log line</th></tr></thead><tbody></tbody></table></div>
+      <p class="muted small" id="d-note"></p>
+    </section>
+  </div>
+
+  <div id="tab-events" hidden>
+    <section class="card">
+      <div class="filters">
+        <label>Source
+          <select id="ev-source"><option value="">all</option><option>nginx</option><option>ssh</option><option>windows</option></select>
+        </label>
+        <label class="grow">Contains
+          <input id="ev-q" type="search" placeholder="text to find in the raw log line">
+        </label>
+      </div>
+      <div class="scroll"><table id="events-table"><thead><tr><th>Time (UTC)</th><th>Source</th><th>Host</th><th>Log line</th></tr></thead><tbody></tbody></table></div>
+      <p class="muted small">Showing the newest 100 matches.</p>
+    </section>
+  </div>
+
+  <div id="tab-rules" hidden>
+    <section class="card">
+      <div class="scroll"><table id="rules-table"><thead><tr><th>Level</th><th>Rule</th><th>Type</th><th>Description</th><th class="num">Alerts</th></tr></thead><tbody></tbody></table></div>
+    </section>
+  </div>
+</main>
+<footer class="wrap muted small">Read-only view of a local MiniSIEM database. Log content is untrusted and is only ever displayed as text.</footer>
+<script src="/app.js"></script>
+</body>
+</html>

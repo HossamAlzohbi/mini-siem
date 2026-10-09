@@ -1,0 +1,199 @@
+title: Windows failed logon (remote)
+name: win_failed_logon
+description: Building block. Event 4625 with a remote source address.
+logsource: {product: windows, service: security}
+detection:
+  selection:
+    EventID: 4625
+  filter_local:
+    IpAddress:
+      - '-'
+      - '::1'
+      - '127.0.0.1'
+  condition: selection and not filter_local
+level: informational
+---
+title: Windows successful network/RDP logon
+name: win_logon_success
+description: Building block. Event 4624 with logon type 3 (network) or 10 (RemoteInteractive) from a remote address.
+logsource: {product: windows, service: security}
+detection:
+  selection:
+    EventID: 4624
+    LogonType:
+      - 3
+      - 10
+  filter_local:
+    IpAddress:
+      - '-'
+      - '::1'
+      - '127.0.0.1'
+  condition: selection and not filter_local
+level: informational
+---
+title: Windows brute force
+name: win_bruteforce
+description: Many failed remote logons (4625) from one address in a short time.
+alert: true
+tags: [attack.credential_access, attack.t1110.001]
+falsepositives:
+  - Services with an expired password retrying in a loop.
+correlation:
+  type: event_count
+  rules: [win_failed_logon]
+  group-by: [IpAddress]
+  timespan: 5m
+  condition: {gte: 8}
+level: high
+---
+title: Windows password spraying
+name: win_password_spray
+description: One address fails to log on as many different accounts.
+tags: [attack.credential_access, attack.t1110.003]
+correlation:
+  type: value_count
+  rules: [win_failed_logon]
+  group-by: [IpAddress]
+  timespan: 10m
+  condition: {gte: 5, field: TargetUserName}
+level: high
+---
+title: Windows logon succeeded after brute force
+name: win_compromise
+description: A successful remote logon from an address that just triggered the brute-force detection.
+tags: [attack.credential_access, attack.t1110, attack.initial_access, attack.t1078]
+correlation:
+  type: temporal_ordered
+  rules: [win_bruteforce, win_logon_success]
+  group-by: [IpAddress]
+  timespan: 15m
+level: critical
+---
+title: Local user account created
+name: win_user_created
+description: Event 4720, a user account was created.
+logsource: {product: windows, service: security}
+detection:
+  selection:
+    EventID: 4720
+  condition: selection
+tags: [attack.persistence, attack.t1136.001]
+falsepositives:
+  - Planned onboarding by IT.
+level: medium
+---
+title: Member added to a privileged group
+name: win_admin_group_added
+description: >
+  Events 4728/4732/4756 for administrator-level groups. Group names are localised
+  (for example "Administratorer" on Norwegian Windows); extend the list for your environment.
+logsource: {product: windows, service: security}
+detection:
+  selection:
+    EventID:
+      - 4728
+      - 4732
+      - 4756
+    TargetUserName:
+      - 'Administrators'
+      - 'Administratorer'
+      - 'Domain Admins'
+      - 'Enterprise Admins'
+  condition: selection
+tags: [attack.persistence, attack.privilege_escalation, attack.t1098]
+falsepositives:
+  - Planned privilege changes by IT.
+level: high
+---
+title: Windows event log cleared
+name: win_log_cleared
+description: The Security log (1102) or System log (104) was cleared.
+logsource: {product: windows, service: security}
+detection:
+  selection_security:
+    EventID: 1102
+  selection_system:
+    EventID: 104
+    Channel: System
+  condition: 1 of selection_*
+tags: [attack.defense_evasion, attack.t1070.001]
+falsepositives:
+  - Planned log maintenance.
+level: high
+---
+title: New service installed
+name: win_service_installed
+description: Event 4697 / 7045. Attackers install services for persistence.
+logsource: {product: windows, service: system}
+detection:
+  selection:
+    EventID:
+      - 4697
+      - 7045
+  condition: selection
+tags: [attack.persistence, attack.t1543.003]
+falsepositives:
+  - Software installation and updates (noisy on workstations).
+level: medium
+---
+title: Encoded PowerShell command line
+name: win_encoded_powershell
+description: PowerShell started with an encoded command, commonly used to hide payloads.
+logsource: {category: process_creation, product: windows}
+detection:
+  selection_img:
+    Image|endswith:
+      - '\powershell.exe'
+      - '\pwsh.exe'
+  selection_cli:
+    CommandLine|contains:
+      - ' -enc '
+      - ' -encodedcommand '
+      - ' -ec '
+  condition: selection_img and selection_cli
+tags: [attack.execution, attack.t1059.001]
+falsepositives:
+  - Some management tools launch PowerShell with encoded commands.
+level: high
+---
+title: Office application spawns a shell
+name: win_office_spawns_shell
+description: Word, Excel, PowerPoint or Outlook starting a command interpreter or script host.
+logsource: {category: process_creation, product: windows}
+detection:
+  selection_parent:
+    ParentImage|endswith:
+      - '\winword.exe'
+      - '\excel.exe'
+      - '\powerpnt.exe'
+      - '\outlook.exe'
+  selection_child:
+    Image|endswith:
+      - '\cmd.exe'
+      - '\powershell.exe'
+      - '\pwsh.exe'
+      - '\wscript.exe'
+      - '\cscript.exe'
+      - '\mshta.exe'
+  condition: all of selection_*
+tags: [attack.execution, attack.t1204.002]
+falsepositives:
+  - Macro-based business workflows.
+level: high
+---
+title: Credential dumping tool command line
+name: win_credential_dumping_cli
+description: Command lines typical for Mimikatz or LSASS memory dumping.
+logsource: {category: process_creation, product: windows}
+detection:
+  selection:
+    CommandLine|contains:
+      - 'mimikatz'
+      - 'sekurlsa::'
+      - 'comsvcs.dll, MiniDump'
+      - 'procdump -ma lsass'
+  condition: selection
+tags: [attack.credential_access, attack.t1003.001]
+falsepositives:
+  - Red-team exercises.
+level: critical
